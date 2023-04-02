@@ -1,10 +1,10 @@
 pragma solidity ^0.8.0;
 
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@openzeppelin/contracts/access/Ownable.sol";
+// import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+// import "@openzeppelin/contracts/access/Ownable.sol";
 
-contract DeFiPlatform is Ownable, IERC20 {
-    IERC20 public stablecoin;
+contract DeFiPlatform {
+    // IERC20 public stablecoin;
 
     struct User {
         address user_address;
@@ -25,7 +25,6 @@ contract DeFiPlatform is Ownable, IERC20 {
         uint256 no_of_installments;
         uint256 no_of_installments_done;
         uint256 each_installment_amount;
-        uint256 interest_rate;
         uint256 each_term;
     }
 
@@ -34,6 +33,7 @@ contract DeFiPlatform is Ownable, IERC20 {
         uint256 reputation_score;
         bool is_nid_verified;
         address[] referred_borrower;
+        uint reward;
         uint256 balance;
     }
 
@@ -55,9 +55,9 @@ contract DeFiPlatform is Ownable, IERC20 {
     }
 
     enum Status {
-        Pending,
+        pending,
         approved,
-        Cancelled
+        cancelled
     }
 
     mapping(address => User) public address_user;
@@ -69,33 +69,41 @@ contract DeFiPlatform is Ownable, IERC20 {
     uint256 private last_borrowing_group_id;
     uint256 private last_vault_id;
     uint256 private last_loan_id;
+    address owner;
 
-
-    constructor(IERC20 _stablecoin) {
-        stablecoin = _stablecoin;
+    constructor() {
+        //IERC20 _stablecoin
+        // stablecoin = _stablecoin;
         owner = payable(msg.sender);
         last_borrowing_group_id = 0;
         last_vault_id = 0;
         last_loan_id = 0;
     }
 
-    function payable become_staker(
-        bool _is_nid_verified,
-    ){
+    function become_staker(bool _is_nid_verified) external payable {
         address_staker[msg.sender] = Staker({
-        reputation_score: 100;
-        is_nid_verified = _is_nid_verified;
-        balance = msg.value;
-        })
+            total_amount_staked: 0,
+            reputation_score: 100,
+            is_nid_verified: _is_nid_verified,
+            balance: msg.value,
+            reward: 0,
+            referred_borrower: new address[](10)
+        });
     }
 
     function stake(uint256 loan_id) external {
-        require(loanId_loan[loan_id].amount > address_staker[msg.sender].balance, "You don't have sufficient balance");
+        require(
+            loanId_loan[loan_id].amount > address_staker[msg.sender].balance,
+            "You don't have sufficient balance"
+        );
 
         loanId_loan[loan_id].staker = msg.sender;
         address_staker[msg.sender].balance -= loanId_loan[loan_id].amount;
-        address_staker[msg.sender].total_amount_staked = loanId_loan[loan_id].amount;
-        address_staker[msg.sender].referred_borrower.push(loanId_loan[loan_id].borrower);
+        address_staker[msg.sender].total_amount_staked = loanId_loan[loan_id]
+            .amount;
+        address_staker[msg.sender].referred_borrower.push(
+            loanId_loan[loan_id].borrower
+        );
 
         //emit en event to the PM.
     }
@@ -105,7 +113,7 @@ contract DeFiPlatform is Ownable, IERC20 {
         uint256 interest_rate
     ) external {
         require(
-            address_user[msg.sender].balance >= amount,
+            address_user[msg.sender].balance >= total_amount,
             "Insufficient balance"
         );
         require(
@@ -114,29 +122,24 @@ contract DeFiPlatform is Ownable, IERC20 {
         );
 
         uint256 vault_id = last_vault_id++;
-        vaultId_vault[vault_id] = Vault({
-                vault_owner : msg.sender;
-                total_supply : total_amount;
-                remaining_supply : total_amount; //remaining balance
-                interest_rate : interest_rate;
-                status : Status.pending;
-        });
-
+        Vault storage vault = vaultId_vault[vault_id];
+        vault.vault_owner = msg.sender;
+        vault.total_supply = total_amount;
+        vault.remaining_supply = total_amount; //remaining balance
+        vault.interest_rate = interest_rate;
+        vault.status = Status.pending;
         // emit VaultCreated(vaultId, msg.sender, interestRate, isGroupVault);
     }
 
-    function initiate_group_vault(
-        uint256 interest_rate
-    ) external {
+    function initiate_group_vault(uint256 interest_rate) external {
         // require(
         //     msg.sender == pm_address;
         //     "only pm can initiate a group vault"
         // ); //
-                uint256 vault_id = last_vault_id++;
-                vaultId_vault[vault_id] = Vault({
-                interest_rate : interest_rate;
-                status : Status.pending;
-        });
+        uint256 vault_id = last_vault_id++;
+        Vault storage vault = vaultId_vault[vault_id];
+        vault.interest_rate = interest_rate;
+        vault.status = Status.pending;
     }
 
     function join_group_vault(uint256 contribution, uint256 vault_id) external {
@@ -150,18 +153,18 @@ contract DeFiPlatform is Ownable, IERC20 {
         );
 
         vaultId_vault[vault_id].total_supply += contribution;
-        vaultId_vault[vault_id].member_contribution[msg.sender] = contribution
+        vaultId_vault[vault_id].member_contribution[msg.sender] = contribution;
     }
 
-    function approve_vault( uint256 vault_id){
+    function approve_vault(uint256 vault_id) external {
         //for individual vault
-        if(vaultId_vault[vault_id].vault_owner){
-        vaultId_vault[vault_id].status = Status.approved;
-        vaultId_vault[vault_id].creation_date = block.timestamp;
-        vaultId_vault[vault_id].remaining_supply = vaultId_vault[vault_id].total_supply;
+        if (vaultId_vault[vault_id].vault_owner != address(0)) {
+            vaultId_vault[vault_id].status = Status.approved;
+            vaultId_vault[vault_id].creation_date = block.timestamp;
+            vaultId_vault[vault_id].remaining_supply = vaultId_vault[vault_id]
+                .total_supply;
         }
     }
-
 
     function individual_borrow(
         uint256 vault_id,
@@ -169,63 +172,79 @@ contract DeFiPlatform is Ownable, IERC20 {
         uint _each_installment_amount,
         uint _no_of_installments,
         uint _each_term,
-        uint _vault_id,
-        ){
-          require(
-            _amount <= 10000,
-            "exceeded loan limit. Only upto 10000 taka"
+        uint _vault_id
+    ) external {
+        require(_amount <= 10000, "exceeded loan limit. Only upto 10000 taka");
+        uint256 loan_id = last_loan_id++;
+
+        Loan memory loan = Loan({
+            borrower: msg.sender,
+            amount: _amount,
+            status: Status.pending,
+            vault_id: _vault_id,
+            no_of_installments: _no_of_installments,
+            each_installment_amount: _each_installment_amount,
+            each_term: _each_term,
+            staker: address(0), // Add a default value or a suitable value for the staker field
+            start_date: 0, // Add a default value or a suitable value for the start_date field
+            borrowing_group_id: 0, // Add a default value or a suitable value for the borrowing_group_id field
+            no_of_installments_done: 0 // Add a default value for the no_of_installments_done field
+            // interest_rate: 0 // Add a default value or a suitable value for the interest_rate field
+        });
+    }
+
+    function approve_loan(uint256 _loan_id) external {
+        require(
+            vaultId_vault[loanId_loan[_loan_id].vault_id].total_supply >=
+                loanId_loan[_loan_id].amount,
+            "Not enough fund in the vault"
         );
-        uint256 loan_id= last_loan_id++;
-        loanId_loan[loan_id] = Loan({
-            borrower : msg.sender;
-            amount: _amount;
-            status: Status.pending;
-            vault_id: _vault_id;
-            no_of_installments: _no_of_installments;
-            each_installment_amount: _each_installment_amount;
-            each_term: _each_term;
-        })
+        require(loanId_loan[_loan_id].staker != address(0), "no staker found");
+
+        address_user[loanId_loan[_loan_id].borrower].balance = loanId_loan[
+            _loan_id
+        ].amount;
+        vaultId_vault[loanId_loan[_loan_id].vault_id]
+            .total_supply -= loanId_loan[_loan_id].amount;
     }
 
-    function approve_loan(_loan_id){
-        require(vaultId_vault[loanId_loan[_loan_id].vault_id].total_supply >= loanId_loan[_loan_id].amount,
-                "Not enough fund in the vault");
-        require(loanId_loan[_loan_id].staker, "no staker found");
-
-        address_user[loanId_loan[_loan_id].borrower].balance = loanId_loan[_loan_id].amount;
-        vaultId_vault[loanId_loan[_loan_id].vault_id].total_supply -= loanId_loan[_loan_id].amount;
-    }
-
-
-    function cashout_loan(uint _amount){
+    function cashout_loan(uint _amount) external {
         // require(msg.sender == owner, "Only the owner can transfer money from contract.");
-        require(address_user[msg.sender].balance >= _amount,
-        "not enough balance");
-        require(address(this).balance >= _amount, "Not enough Ether in the contract.");
+        require(
+            address_user[msg.sender].balance >= _amount,
+            "not enough balance"
+        );
+        require(
+            address(this).balance >= _amount,
+            "Not enough Ether in the contract."
+        );
         uint cashout_amount = _amount - calculate_fees(_amount);
         payable(msg.sender).transfer(cashout_amount);
     }
 
-    function individual_installment_repay_wtih_interest(uint _loan_id) payable external{
+    function individual_installment_repay_wtih_interest(
+        uint _loan_id
+    ) external payable {
         uint installment_amount = loanId_loan[_loan_id].each_installment_amount;
         uint vault_id = loanId_loan[_loan_id].vault_id;
-        Vault vault = vaultId_vault[vault_id]
-        require(msg.value >= installment_amount, "Amount must be equal or more than each_term");
+        Vault storage vault = vaultId_vault[vault_id];
+        require(
+            msg.value >= installment_amount,
+            "Amount must be equal or more than each_term"
+        );
         loanId_loan[_loan_id].no_of_installments_done += 1;
         // add the interest later. will deal with fixed point number.
         vault.remaining_supply = installment_amount;
-        vault.interest_earned = calculate_interest;
+        vault.interest_earned = calculate_interest();
+        //calculate credit score for borrower, lender, staker
+        // give staker the reward
     }
 
-
-    function calculate_fees(uint256 _amount) returns (uint256){
+    function calculate_fees(uint256 _amount) internal pure returns (uint256) {
         return 100;
     }
 
-    function calculate_interest() returns (uint256){
-            return 200;
+    function calculate_interest() internal pure returns (uint256) {
+        return 200;
     }
-
- 
-
 }
