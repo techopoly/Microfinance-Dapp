@@ -205,7 +205,8 @@ contract DeFiPlatform {
         );
         require(loanId_loan[_loan_id].staker != address(0), "no staker found");
 
-        address_user[loanId_loan[_loan_id].borrower].balance = loanId_loan[
+        User storage user = address_user[loanId_loan[_loan_id].borrower];
+        user.balance += loanId_loan[
             _loan_id
         ].amount;
         vaultId_vault[loanId_loan[_loan_id].vault_id]
