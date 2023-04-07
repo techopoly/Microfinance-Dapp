@@ -2,6 +2,7 @@ pragma solidity ^0.8.0;
 
 // import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 // import "@openzeppelin/contracts/access/Ownable.sol";
+// import "hashs/SHA3.sol";
 
 contract DeFiPlatform {
     // IERC20 public stablecoin;
@@ -33,7 +34,7 @@ contract DeFiPlatform {
         uint256 reputation_score;
         bool is_nid_verified;
         address[] referred_borrower;
-        uint reward;
+        uint256 reward;
         uint256 balance;
     }
 
@@ -42,7 +43,7 @@ contract DeFiPlatform {
         uint256 total_supply;
         uint256 remaining_supply;
         uint256 interest_rate;
-        uint interest_earned;
+        uint256 interest_earned;
         uint256 creation_date;
         mapping(address => uint256) member_contribution;
         Status status;
@@ -80,12 +81,12 @@ contract DeFiPlatform {
         last_loan_id = 0;
     }
 
-    function become_staker(bool _is_nid_verified) external payable {
+    function become_staker(bool _is_nid_verified) external {
         address_staker[msg.sender] = Staker({
             total_amount_staked: 0,
             reputation_score: 100,
             is_nid_verified: _is_nid_verified,
-            balance: msg.value,
+            balance: 0,
             reward: 0,
             referred_borrower: new address[](10)
         });
@@ -93,8 +94,8 @@ contract DeFiPlatform {
 
     function stake(uint256 loan_id) external {
         require(
-            loanId_loan[loan_id].amount > address_staker[msg.sender].balance,
-            "You don't have sufficient balance"
+            address_staker[msg.sender].balance > loanId_loan[loan_id].amount,
+            "You don't have enough balance"
         );
 
         loanId_loan[loan_id].staker = msg.sender;
@@ -112,16 +113,18 @@ contract DeFiPlatform {
         uint256 total_amount,
         uint256 interest_rate
     ) external {
-        require(
-            address_user[msg.sender].balance >= total_amount,
-            "Insufficient balance"
-        );
+        User storage user = address_user[msg.sender];
+        require(user.balance >= total_amount, "Insufficient balance");
         require(
             address_user[msg.sender].is_nid_verified == true,
             "NID is not verified"
         );
 
-        uint256 vault_id = last_vault_id++;
+        user.balance = user.balance - total_amount;
+
+        uint256 vault_id = last_vault_id + 1;
+        last_vault_id++;
+        // vaultId_vault[vault_id] = Vault({});
         Vault storage vault = vaultId_vault[vault_id];
         vault.vault_owner = msg.sender;
         vault.total_supply = total_amount;
@@ -167,15 +170,15 @@ contract DeFiPlatform {
     }
 
     function individual_borrow(
-        uint256 vault_id,
-        uint _amount,
-        uint _each_installment_amount,
-        uint _no_of_installments,
-        uint _each_term,
-        uint _vault_id
+        uint256 _vault_id,
+        uint256 _amount,
+        uint256 _each_installment_amount,
+        uint256 _no_of_installments,
+        uint256 _each_term
     ) external {
         require(_amount <= 10000, "exceeded loan limit. Only upto 10000 taka");
-        uint256 loan_id = last_loan_id++;
+        uint256 loan_id = last_loan_id + 1;
+        last_loan_id++;
 
         Loan memory loan = Loan({
             borrower: msg.sender,
@@ -191,6 +194,7 @@ contract DeFiPlatform {
             no_of_installments_done: 0 // Add a default value for the no_of_installments_done field
             // interest_rate: 0 // Add a default value or a suitable value for the interest_rate field
         });
+        loanId_loan[loan_id] = loan;
     }
 
     function approve_loan(uint256 _loan_id) external {
@@ -208,7 +212,7 @@ contract DeFiPlatform {
             .total_supply -= loanId_loan[_loan_id].amount;
     }
 
-    function cashout_loan(uint _amount) external {
+    function cashout_loan(uint256 _amount) external {
         // require(msg.sender == owner, "Only the owner can transfer money from contract.");
         require(
             address_user[msg.sender].balance >= _amount,
@@ -218,15 +222,17 @@ contract DeFiPlatform {
             address(this).balance >= _amount,
             "Not enough Ether in the contract."
         );
-        uint cashout_amount = _amount - calculate_fees(_amount);
+        uint256 cashout_amount = _amount - calculate_fees(_amount);
         payable(msg.sender).transfer(cashout_amount);
     }
 
-    function individual_installment_repay_wtih_interest(
-        uint _loan_id
-    ) external payable {
-        uint installment_amount = loanId_loan[_loan_id].each_installment_amount;
-        uint vault_id = loanId_loan[_loan_id].vault_id;
+    function individual_installment_repay_wtih_interest(uint256 _loan_id)
+        external
+        payable
+    {
+        uint256 installment_amount = loanId_loan[_loan_id]
+            .each_installment_amount;
+        uint256 vault_id = loanId_loan[_loan_id].vault_id;
         Vault storage vault = vaultId_vault[vault_id];
         require(
             msg.value >= installment_amount,
@@ -246,5 +252,56 @@ contract DeFiPlatform {
 
     function calculate_interest() internal pure returns (uint256) {
         return 200;
+    }
+
+function add_balance(string memory user_type) external payable {
+    string memory user = "user";
+    string memory staker = "staker";
+    if (keccak256(abi.encodePacked(user_type)) == keccak256(abi.encodePacked(user))) {
+        uint256 amount = msg.value;
+        address_user[msg.sender].balance =
+            address_user[msg.sender].balance +
+            amount;
+    }
+    if(keccak256(abi.encodePacked(user_type)) == keccak256(abi.encodePacked(staker))){
+        Staker storage staker = address_staker[msg.sender];
+        staker.balance += msg.value;
+    }
+}
+
+    function add_user() external {
+        address_user[msg.sender] = User({
+            user_address: msg.sender,
+            is_nid_verified: true,
+            loan_id: new uint256[](0),
+            balance: 0,
+            credit_score: 0
+        });
+    }
+
+    function get_balance() external view returns (uint256) {
+        return address_user[msg.sender].balance;
+    }
+
+    function show_user() external view returns (User memory) {
+        return address_user[msg.sender];
+    }
+
+    function show_last_vault_id() external view returns (uint256) {
+        return last_vault_id;
+    }
+
+    function withdraw_balance(uint256 amount) external {
+        User storage user = address_user[msg.sender];
+        require(
+            amount <= user.balance,
+            "withdraw amount is more than your balance"
+        );
+        payable(msg.sender).transfer(amount);
+        user.balance -= amount;
+    }
+
+    function show_contract_balance() external view returns (uint256) {
+        return address(this).balance;
     }
 }
