@@ -217,14 +217,15 @@ contract DeFiPlatform {
         // require(msg.sender == owner, "Only the owner can transfer money from contract.");
         require(
             address_user[msg.sender].balance >= _amount,
-            "not enough balance"
+            "you don't have enough balance"
         );
         require(
             address(this).balance >= _amount,
-            "Not enough Ether in the contract."
+            "Not enough balance in the contract."
         );
         uint256 cashout_amount = _amount - calculate_fees(_amount);
         payable(msg.sender).transfer(cashout_amount);
+        address_user[msg.sender].balance -= _amount;
     }
 
     function individual_installment_repay_wtih_interest(uint256 _loan_id)
